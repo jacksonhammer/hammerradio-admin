@@ -8,7 +8,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Wifi, Ban, Trash2 } from 'lucide-react';
+import { Wifi, Ban, Trash2, UserRound } from 'lucide-react';
 import type { BannedUser } from '@/lib/types';
 
 interface Presence {
@@ -67,6 +67,13 @@ export function ListenersPanel() {
     await deleteDoc(doc(db, 'bannedUsers', userId));
   }
 
+  // Gap between the real stream listener count and named/identified listeners —
+  // these are people connected to the audio stream who never opened chat/the app UI.
+  const anonymousCount =
+    listenerCount !== null
+      ? Math.max(0, listenerCount - listeners.length)
+      : 0;
+
   return (
     <div className="p-4 h-full flex flex-col gap-6">
       {/* Live count */}
@@ -92,10 +99,10 @@ export function ListenersPanel() {
           <p className="text-xs text-gray-500 uppercase tracking-wider">Currently Listening</p>
           <span className="text-xs text-green-400 font-semibold flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block animate-pulse" />
-            {listeners.length} active
+            {listeners.length + anonymousCount} active
           </span>
         </div>
-        {listeners.length === 0 ? (
+        {listeners.length === 0 && anonymousCount === 0 ? (
           <p className="text-xs text-gray-600 text-center py-2">No one active right now</p>
         ) : (
           <div className="space-y-1 max-h-40 overflow-y-auto">
@@ -105,6 +112,15 @@ export function ListenersPanel() {
                 <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
               </div>
             ))}
+            {anonymousCount > 0 && (
+              <div className="flex items-center justify-between text-xs pt-1 mt-1 border-t border-white/5">
+                <span className="text-gray-500 flex items-center gap-1.5">
+                  <UserRound className="w-3 h-3" />
+                  {anonymousCount} Anonymous listener{anonymousCount !== 1 ? 's' : ''}
+                </span>
+                <span className="w-1.5 h-1.5 rounded-full bg-gray-500" />
+              </div>
+            )}
           </div>
         )}
       </div>
