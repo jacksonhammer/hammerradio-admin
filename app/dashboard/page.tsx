@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { collection, query, orderBy, onSnapshot, Timestamp } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import ChatPanel                        from '@/components/chat-panel';
 import { ListenersPanel }               from '@/components/listeners-panel';
@@ -21,9 +22,63 @@ const TABS = [
   { value: 'news',          label: 'News'          },
 ];
 
+// ── Favicon "new activity" dot ──────────────────────────────────
+function useTabActivityBadge(hasActivity: boolean) {
+  const originalFaviconRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const link: HTMLLinkElement =
+      document.querySelector("link[rel~='icon']") ||
+      (() => {
+        const l = document.createElement('link');
+        l.rel = 'icon';
+        document.head.appendChild(l);
+        return l;
+      })();
+
+    if (!originalFaviconRef.current) {
+      originalFaviconRef.current = link.href;
+    }
+
+    if (!hasActivity) {
+      link.href = originalFaviconRef.current;
+      return;
+    }
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = originalFaviconRef.current!;
+    img.onload = () => {
+      const size = 32;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(img, 0, 0, size, size);
+
+      const dotRadius = size * 0.22;
+      ctx.beginPath();
+      ctx.arc(size - dotRadius - 1, dotRadius + 1, dotRadius, 0, Math.PI * 2);
+      ctx.fillStyle = '#ef4444';
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'white';
+      ctx.stroke();
+
+      link.href = canvas.toDataURL('image/png');
+    };
+  }, [hasActivity]);
+}
+
 export default function DashboardPage() {
   const router  = useRouter();
   const [ready, setReady] = useState(false);
+  const [activeTab, setActiveTab] = useState('chat');
+  const [hasNewRequest, setHasNewRequest] = useState(false);
+
+  // Marks the moment we start listening, so the initial snapshot
+  // (existing requests already in Firestore) doesn't trigger the badge.
+  const mountedAtRef = useRef(Timestamp.now());
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
@@ -32,6 +87,36 @@ export default function DashboardPage() {
     });
     return unsub;
   }, [router]);
+
+  // Listen for newly submitted requests, regardless of active tab.
+  useEffect(() => {
+    if (!ready) return;
+
+    const requestsQuery = query(
+      collection(db, 'requests'),
+      orderBy('createdAt', 'desc')
+    );
+
+    const unsub = onSnapshot(requestsQuery, (snapshot) => {
+      const hasNewSubmission = snapshot.docChanges().some((change) => {
+        if (change.type !== 'added') return false;
+        const createdAt = change.doc.data().createdAt as Timestamp | undefined;
+        return !createdAt || createdAt.toMillis() > mountedAtRef.current.toMillis();
+      });
+      if (hasNewSubmission) setHasNewRequest(true);
+    });
+
+    return unsub;
+  }, [ready]);
+
+  // Clear the badge as soon as the Requests tab is opened
+  useEffect(() => {
+    if (activeTab === 'requests' && hasNewRequest) {
+      setHasNewRequest(false);
+    }
+  }, [activeTab, hasNewRequest]);
+
+  useTabActivityBadge(hasNewRequest);
 
   if (!ready) {
     return (
@@ -43,7 +128,11 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white flex flex-col">
-      <Tabs defaultValue="chat" className="flex-1 flex flex-col min-h-0">
+      <Tabs
+        value={activeTab}
+        onValueChange={setActiveTab}
+        className="flex-1 flex flex-col min-h-0"
+      >
 
         {/* ── Sticky top bar: header + tab strip ────────────────── */}
         <div className="sticky top-0 z-50 bg-gray-950 border-b border-white/10 flex-shrink-0">
@@ -72,9 +161,12 @@ export default function DashboardPage() {
                 <TabsTrigger
                   key={tab.value}
                   value={tab.value}
-                  className="text-gray-400 data-[state=active]:bg-orange-600 data-[state=active]:text-white text-xs px-4"
+                  className="relative text-gray-400 data-[state=active]:bg-orange-600 data-[state=active]:text-white text-xs px-4"
                 >
                   {tab.label}
+                  {tab.value === 'requests' && hasNewRequest && (
+                    <span className="absolute top-1 right-1.5 w-2 h-2 rounded-full bg-red-500 ring-2 ring-gray-900" />
+                  )}
                 </TabsTrigger>
               ))}
             </TabsList>
