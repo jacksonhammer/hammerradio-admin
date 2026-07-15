@@ -66,16 +66,15 @@ function useTabActivityBadge(hasActivity: boolean) {
 
     setFavicon(canvas.toDataURL('image/png'));
   }, [hasActivity]);
-  
+
 }
 export default function DashboardPage() {
   const router  = useRouter();
   const [ready, setReady] = useState(false);
   const [activeTab, setActiveTab] = useState('chat');
   const [hasNewRequest, setHasNewRequest] = useState(false);
+  const [windowFocused, setWindowFocused] = useState(true);
 
-  // Marks the moment we start listening, so the initial snapshot
-  // (existing requests already in Firestore) doesn't trigger the badge.
   const mountedAtRef = useRef(Timestamp.now());
 
   useEffect(() => {
@@ -86,7 +85,18 @@ export default function DashboardPage() {
     return unsub;
   }, [router]);
 
-  // Listen for newly submitted requests, regardless of active tab.
+  // Track whether this browser tab/window actually has focus right now
+  useEffect(() => {
+    const handleFocus = () => setWindowFocused(true);
+    const handleBlur = () => setWindowFocused(false);
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('blur', handleBlur);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, []);
+
   useEffect(() => {
     if (!ready) return;
 
@@ -107,15 +117,17 @@ export default function DashboardPage() {
     return unsub;
   }, [ready]);
 
-  // Clear the badge as soon as the Requests tab is opened
+  // Only clear the badge when the Requests tab is selected AND the window is actually focused
   useEffect(() => {
-    if (activeTab === 'requests' && hasNewRequest) {
+    if (activeTab === 'requests' && windowFocused && hasNewRequest) {
       setHasNewRequest(false);
     }
-  }, [activeTab, hasNewRequest]);
+  }, [activeTab, windowFocused, hasNewRequest]);
 
   useTabActivityBadge(hasNewRequest);
 
+  // ... rest of the component unchanged
+  
   if (!ready) {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center">
