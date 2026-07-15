@@ -22,54 +22,52 @@ const TABS = [
   { value: 'news',          label: 'News'          },
 ];
 
-// ── Favicon "new activity" dot ──────────────────────────────────
 function useTabActivityBadge(hasActivity: boolean) {
   const originalFaviconRef = useRef<string | null>(null);
 
   useEffect(() => {
-    const link: HTMLLinkElement =
-      document.querySelector("link[rel~='icon']") ||
-      (() => {
-        const l = document.createElement('link');
-        l.rel = 'icon';
-        document.head.appendChild(l);
-        return l;
-      })();
+    const existing = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
 
     if (!originalFaviconRef.current) {
-      originalFaviconRef.current = link.href;
+      originalFaviconRef.current = existing?.href || '/favicon.ico';
+    }
+
+    function setFavicon(href: string) {
+      // Remove ALL existing icon links, then insert one fresh one —
+      // more reliable across browsers than just mutating .href
+      document.querySelectorAll("link[rel~='icon']").forEach((el) => el.remove());
+      const link = document.createElement('link');
+      link.rel = 'icon';
+      link.href = href;
+      document.head.appendChild(link);
     }
 
     if (!hasActivity) {
-      link.href = originalFaviconRef.current;
+      setFavicon(originalFaviconRef.current);
       return;
     }
 
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.src = originalFaviconRef.current!;
-    img.onload = () => {
-      const size = 32;
-      const canvas = document.createElement('canvas');
-      canvas.width = size;
-      canvas.height = size;
-      const ctx = canvas.getContext('2d')!;
-      ctx.drawImage(img, 0, 0, size, size);
+    const size = 32;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d')!;
 
-      const dotRadius = size * 0.22;
-      ctx.beginPath();
-      ctx.arc(size - dotRadius - 1, dotRadius + 1, dotRadius, 0, Math.PI * 2);
-      ctx.fillStyle = '#ef4444';
-      ctx.fill();
-      ctx.lineWidth = 1.5;
-      ctx.strokeStyle = 'white';
-      ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+    ctx.fillStyle = '#111827';
+    ctx.fill();
 
-      link.href = canvas.toDataURL('image/png');
-    };
+    const dotRadius = size * 0.28;
+    ctx.beginPath();
+    ctx.arc(size / 2, size / 2, dotRadius, 0, Math.PI * 2);
+    ctx.fillStyle = '#ef4444';
+    ctx.fill();
+
+    setFavicon(canvas.toDataURL('image/png'));
   }, [hasActivity]);
+  
 }
-
 export default function DashboardPage() {
   const router  = useRouter();
   const [ready, setReady] = useState(false);
